@@ -13,12 +13,10 @@ from rl_agent import RLAgent
 
 
 def game_score(lines_cleared: int) -> int:
-    """Evaluation score, kept separate from RL training reward."""
     return 100 * (lines_cleared ** 2)
 
 
 def compute_reward(agent, new_board, lines_cleared, cleared_cells):
-    """Support both old and new reward_function signatures."""
     try:
         return agent.reward_function(new_board, lines_cleared, cleared_cells)
     except TypeError:
@@ -41,8 +39,8 @@ def train_agent(
     sim = game(use_bomb=use_bomb, bomb_probability=bomb_probability)
     agent = RLAgent()
 
-    episode_rewards = []      # shaped RL reward used for learning
-    episode_game_scores = []  # line-clear score used for evaluation/reporting
+    episode_rewards = []      
+    episode_game_scores = []  
     episode_lines = []
     episode_moves = []
     losses = []
@@ -87,8 +85,7 @@ def train_agent(
                     done = True
                     break
 
-                # Candidate format: ((rotation, col), new_board, lines_cleared, state_features, cleared_cells)
-                # Indexing is safer than unpacking if the tuple later gets extended.
+        
                 rotation, col = chosen[0]
                 new_board = chosen[1]
                 lines_cleared = chosen[2]
@@ -97,7 +94,7 @@ def train_agent(
 
                 reward = compute_reward(agent, new_board, lines_cleared, cleared_cells)
 
-                # Commit chosen move to actual board.
+                
                 board.grid = [row[:] for row in new_board.grid]
 
                 total_reward += reward
@@ -105,7 +102,6 @@ def train_agent(
                 total_lines += lines_cleared
                 moves_played += 1
 
-                # Estimate next state using the next piece and greedy action selection.
                 next_block = sim.get_random_block()
                 next_block_class = next_block.__class__
                 next_candidates = agent.get_candidate_moves(board, next_block_class)
@@ -179,8 +175,8 @@ if __name__ == "__main__":
     train_agent(
         episodes=1500,
         max_moves=1000,
-        save_path="tetris_rl_agent.pt",
-        log_path="training_log.csv",
+        save_path="final_tetris_rl_agent.pt",
+        log_path="final_training_log.csv",
         seed=42,
         use_bomb=False,
     )
