@@ -5,8 +5,8 @@ from rl_agent import RLAgent
 
 
 def evaluate_agent(
-    model_path: str = "final_tetris_rl_agent.pt",
-    num_games: int = 100,
+    model_path: str = "tetris_rl_bomb_reward.pt",
+    num_games: int = 500,
     max_moves: int = 1000,
 ):
     sim = game()

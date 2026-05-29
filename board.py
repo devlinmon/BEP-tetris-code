@@ -1,6 +1,6 @@
 class Board:
     def __init__(self):
-        self.nr_rows = 20
+        self.nr_rows = 15
         self.nr_cols = 10
         self.grid = [[0 for j in range(self.nr_cols)] for i in range(self.nr_rows)]
 
