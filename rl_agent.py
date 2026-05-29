@@ -62,6 +62,7 @@ class RLAgent:
         replay_capacity: int = 50000,
         device: Optional[str] = None,
         reward_mode: str = "bomb_reward",
+        feature_mode: str = "medium",
     ):
         self.input_dim = input_dim
         self.gamma = gamma
@@ -88,31 +89,61 @@ class RLAgent:
 
         self.replay_buffer = ReplayBuffer(capacity=replay_capacity)
         self.reward_mode = reward_mode
-
+        self.feature_mode = feature_mode
         self.sim = game()
 
     def board_to_features(self, board: Board, lines_cleared: int = 0) -> torch.Tensor:
-
         heights = self.sim.get_column_heights(board)
         aggregate_height = sum(heights)
         holes = self.sim.count_holes(board)
         bumpiness = self.sim.get_bumpiness(heights)
         max_height = max(heights) if heights else 0
         completed_lines = lines_cleared
+        occupied_cells = sum(cell != 0 for row in board.grid for cell in row)
 
-        features = torch.tensor(
-            [
-                aggregate_height / 200.0,   
-                holes / 200.0,
-                bumpiness / 200.0,
-                max_height / 20.0,
+        if self.feature_mode == "low":
+            features = [
+                aggregate_height / 150.0,
+                holes / 150.0,
+                bumpiness / 150.0,
+            ]
+
+        elif self.feature_mode == "medium":
+            features = [
+                aggregate_height / 150.0,
+                holes / 150.0,
+                bumpiness / 150.0,
+                max_height / 15.0,
                 completed_lines / 4.0,
-                1.0,                       
-            ],
-            dtype=torch.float32,
-            device=self.device,
-        )
-        return features
+                1.0,
+            ]
+
+        elif self.feature_mode == "high":
+            mean_height = aggregate_height / len(heights)
+            height_variance = sum((h - mean_height) ** 2 for h in heights) / len(heights)
+
+            almost_complete_rows = 0
+            for row in board.grid:
+                filled = sum(cell != 0 for cell in row)
+                if filled == board.nr_cols - 1:
+                    almost_complete_rows += 1
+
+            features = [
+                aggregate_height / 150.0,
+                holes / 150.0,
+                bumpiness / 150.0,
+                max_height / 15.0,
+                completed_lines / 4.0,
+                occupied_cells / 150.0,
+                height_variance / 100.0,
+                almost_complete_rows / 15.0,
+                1.0,
+            ]
+
+        else:
+            raise ValueError(f"Unknown feature_mode: {self.feature_mode}")
+
+        return torch.tensor(features, dtype=torch.float32, device=self.device)
 
     def reward_function(self, board: Board, lines_cleared: int, cleared_cells: int = 0) -> float:
         heights = self.sim.get_column_heights(board)
@@ -149,9 +180,10 @@ class RLAgent:
                 - 0.1 * bumpiness
             )
         elif self.reward_mode == "bomb_reward":
+            line_bonus = [0, 40, 100, 300, 1200][lines_cleared]
             reward = (
                 1.0
-                + 20.0 * lines_cleared
+                + line_bonus
                 + 10 * cleared_cells
                 - 0.1 * aggregate_height
                 - 0.3 * holes
@@ -196,7 +228,7 @@ class RLAgent:
             return random.choice(candidates)
 
         with torch.no_grad():
-            state_batch = torch.stack([c[3] for c in candidates])  # feature vectors
+            state_batch = torch.stack([c[3] for c in candidates]) 
             q_values = self.policy_net(state_batch).squeeze(-1)
             best_idx = torch.argmax(q_values).item()
 
