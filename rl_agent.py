@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from board import Board
+import board
 from game import game
 
 
@@ -51,9 +52,9 @@ class ReplayBuffer:
 class RLAgent:
     def __init__(
         self,
-        input_dim: int = 6,
+        input_dim: int = 8,
         gamma: float = 0.99,
-        lr: float = 1e-3,
+        lr: float = 5e-4,
         epsilon_start: float = 1.0,
         epsilon_end: float = 0.05,
         epsilon_decay: float = 0.997,
@@ -61,8 +62,8 @@ class RLAgent:
         batch_size: int = 64,
         replay_capacity: int = 50000,
         device: Optional[str] = None,
-        reward_mode: str = "bomb_reward",
-        feature_mode: str = "medium",
+        reward_mode: str = "tetris_survival",
+        feature_mode: str = "high",
     ):
         self.input_dim = input_dim
         self.gamma = gamma
@@ -91,6 +92,55 @@ class RLAgent:
         self.reward_mode = reward_mode
         self.feature_mode = feature_mode
         self.sim = game()
+    def count_row_transitions(self, board: Board) -> int:
+        transitions = 0
+
+        for row in board.grid:
+            previous_filled = True 
+
+            for cell in row:
+                current_filled = cell != 0
+                if current_filled != previous_filled:
+                    transitions += 1
+                previous_filled = current_filled
+
+            if previous_filled is False:  
+                transitions += 1
+
+        return transitions
+
+
+    def count_column_transitions(self, board: Board) -> int:
+        transitions = 0
+
+        for col in range(board.nr_cols):
+            previous_filled = True  
+
+            for row in reversed(range(board.nr_rows)):
+                current_filled = board.grid[row][col] != 0
+                if current_filled != previous_filled:
+                    transitions += 1
+                previous_filled = current_filled
+
+            if previous_filled is False:  
+                transitions += 1
+
+        return transitions
+
+
+    def get_deepest_well(self, heights: list[int]) -> int:
+        deepest = 0
+
+        for i in range(len(heights)):
+            left = heights[i - 1] if i > 0 else 20
+            right = heights[i + 1] if i < len(heights) - 1 else 20
+
+            well_depth = min(left, right) - heights[i]
+
+            if well_depth > deepest:
+                deepest = well_depth
+
+        return deepest
 
     def board_to_features(self, board: Board, lines_cleared: int = 0) -> torch.Tensor:
         heights = self.sim.get_column_heights(board)
@@ -99,46 +149,46 @@ class RLAgent:
         bumpiness = self.sim.get_bumpiness(heights)
         max_height = max(heights) if heights else 0
         completed_lines = lines_cleared
-        occupied_cells = sum(cell != 0 for row in board.grid for cell in row)
+        row_transitions = self.count_row_transitions(board)
+        column_transitions = self.count_column_transitions(board)
+        deepest_well = self.get_deepest_well(heights)
 
         if self.feature_mode == "low":
             features = [
-                aggregate_height / 150.0,
-                holes / 150.0,
-                bumpiness / 150.0,
+                aggregate_height / 200.0,
+                holes / 200.0,
+                bumpiness / 200.0,
             ]
 
         elif self.feature_mode == "medium":
             features = [
-                aggregate_height / 150.0,
-                holes / 150.0,
-                bumpiness / 150.0,
-                max_height / 15.0,
+                aggregate_height / 200.0,
+                holes / 200.0,
+                bumpiness / 200.0,
+                max_height / 20.0,
                 completed_lines / 4.0,
-                1.0,
             ]
 
         elif self.feature_mode == "high":
-            mean_height = aggregate_height / len(heights)
-            height_variance = sum((h - mean_height) ** 2 for h in heights) / len(heights)
-
-            almost_complete_rows = 0
-            for row in board.grid:
-                filled = sum(cell != 0 for cell in row)
-                if filled == board.nr_cols - 1:
-                    almost_complete_rows += 1
-
             features = [
-                aggregate_height / 150.0,
-                holes / 150.0,
-                bumpiness / 150.0,
-                max_height / 15.0,
+                aggregate_height / 200.0,
+                holes / 200.0,
+                bumpiness / 200.0,
+                max_height / 20.0,
                 completed_lines / 4.0,
-                occupied_cells / 150.0,
-                height_variance / 100.0,
-                almost_complete_rows / 15.0,
-                1.0,
-            ]
+                row_transitions / 200.0,
+                column_transitions / 400.0,
+                deepest_well / 20.0,
+        ]
+        elif self.feature_mode == "Dellacherie":
+            features = [
+            row_transitions / 200.0,
+            column_transitions / 400.0,
+            holes / 200.0,
+            deepest_well / 20.0,
+            completed_lines / 4.0,
+            max_height / 20.0,
+        ]
 
         else:
             raise ValueError(f"Unknown feature_mode: {self.feature_mode}")
@@ -179,21 +229,39 @@ class RLAgent:
                 - 0.3 * holes
                 - 0.1 * bumpiness
             )
-        elif self.reward_mode == "bomb_reward":
-            line_bonus = [0, 40, 100, 300, 1200][lines_cleared]
+        elif self.reward_mode == "survival_bonus":
             reward = (
-                1.0
-                + line_bonus
-                + 10 * cleared_cells
+                5.0                      
+                + 20.0 * lines_cleared
                 - 0.1 * aggregate_height
                 - 0.3 * holes
                 - 0.1 * bumpiness
             )
+        elif self.reward_mode == "tetris_survival":
+            line_bonus = [0, 40, 100, 300, 1200][lines_cleared]
 
+            reward = (
+                20.0
+                + line_bonus
+                - 0.1 * aggregate_height
+                - 0.3 * holes
+                - 0.1 * bumpiness
+            )
         else:
             raise ValueError(f"Unknown reward_mode: {self.reward_mode}")
 
         return reward
+    def get_valid_columns_for_rotation(self, board: Board, block_class, rotation):
+        block = block_class()
+        cells = block.cells[rotation]
+
+        min_x = min(cell.x for cell in cells)
+        max_x = max(cell.x for cell in cells)
+
+        start_col = -min_x
+        end_col = board.nr_cols - max_x
+
+        return range(start_col, end_col)
 
     def get_candidate_moves(
         self,
@@ -203,14 +271,14 @@ class RLAgent:
         candidates = []
 
         for rotation in block_class().cells.keys():
-            for col in range(board.nr_cols):
+            for col in self.get_valid_columns_for_rotation(board, block_class, rotation):
                 result = self.sim.simulate_move(board, block_class, rotation, col)
                 if result is None:
                     continue
 
-                new_board, _, cleared_lines, _ = result
+                new_board, _, cleared_lines, cleared_cells = result
                 state_features = self.board_to_features(new_board, cleared_lines)
-                candidates.append(((rotation, col), new_board, cleared_lines, state_features, _))
+                candidates.append(((rotation, col), new_board, cleared_lines, state_features, cleared_cells))
 
         return candidates
 

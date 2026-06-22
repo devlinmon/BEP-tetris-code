@@ -2,11 +2,12 @@ from statistics import mean
 from game import game
 from board import Board
 from heuristic import HeuristicAgent
+import matplotlib.pyplot as plt
 
 
-def run_experiment(num_games=500, max_moves=1000):
+def run_experiment(num_games=300, max_moves=2000):
 
-    g = game(use_bomb=True)
+    g = game(use_bomb=False)
     agent = HeuristicAgent(g)
 
     scores = []
@@ -19,6 +20,16 @@ def run_experiment(num_games=500, max_moves=1000):
     lines_after_bomb_list = []
     height_reduction_list = []
     hole_reduction_list = []
+    tetris_list = []
+    holes_created_list = []
+    holes_removed_list = []
+    total_line_clear_counts = {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0
+    }
+    holes_by_move = [[] for _ in range(max_moves)]
 
     for _ in range(num_games):
 
@@ -34,6 +45,15 @@ def run_experiment(num_games=500, max_moves=1000):
 
         total_height_reduction = 0
         total_hole_reduction = 0
+        tetrises = 0
+        holes_created = 0
+        holes_removed = 0
+        line_clear_counts = {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+        }
 
         while moves < max_moves:
 
@@ -68,6 +88,19 @@ def run_experiment(num_games=500, max_moves=1000):
             new_height = sum(new_heights)
 
             new_holes = g.count_holes(new_board)
+            if cleared_lines == 4:
+                tetrises += 1
+            holes_by_move[moves].append(new_holes)
+
+            if cleared_lines in line_clear_counts:
+                line_clear_counts[cleared_lines] += 1
+
+            hole_difference = new_holes - old_holes
+
+            if hole_difference > 0:
+                holes_created += hole_difference
+            elif hole_difference < 0:
+                holes_removed += abs(hole_difference)
 
             if block_class.__name__ == "BombBlock":
 
@@ -95,9 +128,14 @@ def run_experiment(num_games=500, max_moves=1000):
             score += 100 * (cleared_lines ** 2)
             moves += 1
 
+        for k in total_line_clear_counts:
+            total_line_clear_counts[k] += line_clear_counts[k]
         scores.append(score)
         lines_list.append(lines)
         moves_list.append(moves)
+        tetris_list.append(tetrises)
+        holes_created_list.append(holes_created)
+        holes_removed_list.append(holes_removed)
 
         bombs_used_list.append(bombs_used)
 
@@ -132,29 +170,75 @@ def run_experiment(num_games=500, max_moves=1000):
 
     print("Average bombs used:",
           mean(bombs_used_list))
+    if bomb_cells_list:
+        print(
+        "Bomb efficiency (cells per bomb):",
+        mean(bomb_cells_list)
+    )
+    print("Average Tetrises:", mean(tetris_list))
+    print("Average holes created:", mean(holes_created_list))
+    print("Average holes removed:", mean(holes_removed_list))
+    labels = ["Single", "Double", "Triple", "Tetris"]
+    values = [
+        total_line_clear_counts[1],
+        total_line_clear_counts[2],
+        total_line_clear_counts[3],
+        total_line_clear_counts[4]
+    ]
+
+    plt.figure()
+    plt.bar(labels, values)
+    plt.ylabel("Number of occurrences")
+    plt.title("Distribution of line clear (Heuristic Agent)")
+    plt.tight_layout()
+    plt.savefig("line_clear_histogram_2.png", dpi=300)
+
+    avg_holes = []
+
+    for move in holes_by_move:
+        if len(move) > 0:
+            avg_holes.append(mean(move))
+        else:
+            avg_holes.append(None)
+    x = []
+    y = []
+
+    for i, value in enumerate(avg_holes):
+        if value is not None:
+            x.append(i + 1)
+            y.append(value)
+
+    plt.figure(figsize=(7,4))
+    plt.plot(x, y)
+    plt.xlabel("Move Number")
+    plt.ylabel("Average Number of Holes")
+    plt.title("Average Holes During Gameplay (Heuristic Agent)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("holes_over_time_2.png", dpi=300)
+
 
     if bomb_cells_list:
 
         print(
-            "Average cells cleared per bomb:",
-            mean(bomb_cells_list)
+           "Average cells cleared per bomb:",
+           mean(bomb_cells_list)
         )
 
         print(
-            "Average lines cleared after bomb:",
-            mean(lines_after_bomb_list)
+           "Average lines cleared after bomb:",
+           mean(lines_after_bomb_list)
         )
 
         print(
-            "Average height reduction after bomb:",
-            mean(height_reduction_list)
+           "Average height reduction after bomb:",
+           mean(height_reduction_list)
         )
 
         print(
-            "Average hole reduction after bomb:",
-            mean(hole_reduction_list)
+           "Average hole reduction after bomb:",
+           mean(hole_reduction_list)
         )
-
 
 if __name__ == "__main__":
     run_experiment()

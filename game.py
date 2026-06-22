@@ -5,7 +5,7 @@ import copy
 
 
 class game:
-    def __init__(self, board=None, blocks=None, use_bomb=True, bomb_probability=0.03):
+    def __init__(self, board=None, blocks=None, use_bomb=False, bomb_probability=0.03):
         self.grid = Board()
         self.blocks = [Oblock, Iblock, Sblock, Zblock, Lblock, Jblock, Tblock]
         self.use_bomb = use_bomb
@@ -29,16 +29,26 @@ class game:
         return True
     def game_over(self, board, block):
         return not board.is_valid_position(block)
+    
+    def get_valid_columns_for_rotation(self, board, block_class, rotation):
+        
+        block = block_class()
+        cells = block.cells[rotation]
+
+        min_x = min(cell.x for cell in cells)
+        max_x = max(cell.x for cell in cells)
+
+        start_col = -min_x
+        end_col = board.nr_cols - max_x
+
+        return range(start_col, end_col)
+
+
     def get_legal_placements(self, board, block_class):
         placements = []
 
         for rotation in block_class().cells.keys():
-
-            block = block_class()
-            block.rotation = rotation
-
-            for col in range(board.nr_cols):
-
+            for col in self.get_valid_columns_for_rotation(board, block_class, rotation):
                 test_block = block_class()
                 test_block.rotation = rotation
                 test_block.offset_x = col
@@ -157,7 +167,6 @@ class game:
     def play(self,board, block_class):
         move, score = self.best_move(board, block_class)
         if move is None:
-            #print("No valid moves available")
             return False, 0
 
         rotation, col = move
@@ -192,12 +201,5 @@ class game:
             total_lines_cleared += cleared_lines
             score = (100 * (cleared_lines ** 2)) + score
             moves_played += 1
-
-            #if print_board:
-                #print(f"Move {moves_played}")
-                #board.print_grid()
-                #print("Lines cleared so far:", total_lines_cleared)
-                #print("Current score:", score)
-                #print()
 
         return moves_played, total_lines_cleared, board, score

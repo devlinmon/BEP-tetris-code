@@ -2,15 +2,16 @@ from statistics import mean
 from board import Board
 from game import game
 from rl_agent import RLAgent
-
+import matplotlib.pyplot as plt
 
 def evaluate_agent(
-    model_path: str = "tetris_rl_bomb_reward.pt",
-    num_games: int = 500,
-    max_moves: int = 1000,
+    model_path: str = "tetris_rl_state_high.pt",
+    feature_mode: str = "high",
+    num_games: int = 300,
+    max_moves: int = 2000,
 ):
-    sim = game()
-    agent = RLAgent()
+    sim = game(use_bomb=True)
+    agent = RLAgent(feature_mode=feature_mode)
     agent.load(model_path)
     agent.epsilon = 0.0
 
@@ -24,6 +25,16 @@ def evaluate_agent(
     lines_after_bomb_list = []
     height_reduction_list = []
     hole_reduction_list = []
+    tetris_list = []
+    holes_created_list = []
+    holes_removed_list = []
+    total_line_clear_counts = {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0
+    }
+    holes_by_move = [[] for _ in range(max_moves)]
 
     for _ in range(num_games):
 
@@ -35,6 +46,19 @@ def evaluate_agent(
 
         bombs_used = 0
         bomb_cells_cleared = 0
+        tetrises = 0
+        holes_created = 0
+        holes_removed = 0
+        tetrises = 0
+        holes_created = 0
+        holes_removed = 0
+
+        line_clear_counts = {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+        }
 
         bomb_lines_cleared = 0
 
@@ -78,6 +102,18 @@ def evaluate_agent(
             new_height = sum(new_heights)
 
             new_holes = sim.count_holes(new_board)
+            if lines_cleared == 4:
+                tetrises += 1
+            hole_difference = new_holes - old_holes
+            holes_by_move[moves_played].append(new_holes)
+
+            if lines_cleared in line_clear_counts:
+                line_clear_counts[lines_cleared] += 1
+
+            if hole_difference > 0:
+                holes_created += hole_difference
+            elif hole_difference < 0:
+                holes_removed += abs(hole_difference)
 
             if block_class.__name__ == "BombBlock":
 
@@ -108,7 +144,7 @@ def evaluate_agent(
 
             total_score += 100 * (lines_cleared ** 2)
 
-            board.grid = [row[:] for row in new_board.grid]
+            board = new_board
 
             total_lines += lines_cleared
             moves_played += 1
@@ -116,11 +152,15 @@ def evaluate_agent(
         scores.append(total_score)
         lines_list.append(total_lines)
         moves_list.append(moves_played)
+        tetris_list.append(tetrises)
+        holes_created_list.append(holes_created)
+        holes_removed_list.append(holes_removed)
+        for k in total_line_clear_counts:
+            total_line_clear_counts[k] += line_clear_counts[k]
 
         bombs_used_list.append(bombs_used)
 
         if bombs_used > 0:
-
             bomb_cells_list.append(
                 bomb_cells_cleared / bombs_used
             )
@@ -150,6 +190,53 @@ def evaluate_agent(
 
     print("Average bombs used:",
           mean(bombs_used_list))
+    if bomb_cells_list:
+        print("Bomb efficiency (cells per bomb):",
+        mean(bomb_cells_list))
+    print("Average Tetrises:", mean(tetris_list))
+    print("Average holes created:", mean(holes_created_list))
+    print("Average holes removed:", mean(holes_removed_list))
+    avg_holes = []
+
+    for move in holes_by_move:
+        if len(move) > 0:
+            avg_holes.append(mean(move))
+        else:
+            avg_holes.append(None)
+    labels = ["Single", "Double", "Triple", "Tetris"]
+    values = [
+        total_line_clear_counts[1],
+        total_line_clear_counts[2],
+        total_line_clear_counts[3],
+        total_line_clear_counts[4]
+    ]
+
+    plt.figure()
+    plt.bar(labels, values)
+    plt.ylabel("Number of occurrences")
+    plt.title("Distribution of line clears with Bomb Piece (RL Agent)")
+    plt.tight_layout()
+    plt.savefig("line_clear_histogram_rl_bomb2.png", dpi=300)
+
+    x = []
+    y = []
+
+    for i, value in enumerate(avg_holes):
+        if value is not None:
+            x.append(i + 1)
+            y.append(value)
+
+    plt.figure(figsize=(7,4))
+    plt.plot(x, y)
+    plt.xlabel("Move Number")
+    plt.ylabel("Average Number of Holes")
+    plt.title("Average Holes During Gameplay (RL Agent)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("holes_over_time_rl_2.png", dpi=300)
+
+
+
 
     if bomb_cells_list:
 
@@ -172,6 +259,7 @@ def evaluate_agent(
             "Average hole reduction after bomb:",
             mean(hole_reduction_list)
         )
+        
 
 
 if __name__ == "__main__":

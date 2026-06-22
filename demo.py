@@ -7,14 +7,14 @@ from heuristic import HeuristicAgent
 from rl_agent import RLAgent
 
 
-CELL_SIZE = 30
-ROWS = 15
-COLS = 10
-WIDTH = COLS * CELL_SIZE
-HEIGHT = ROWS * CELL_SIZE
+cell_size = 30
+rows = 20
+cols = 10
+width = cols * cell_size
+height = rows * cell_size
 
 
-COLORS = {
+Colours = {
     0:  (20, 20, 20),      
     1: (255, 200, 46),     
     2: (254, 251, 52),
@@ -44,16 +44,16 @@ def draw_board(screen, board, title="", score=0, lines=0, moves=0):
 
     y_offset = 110
 
-    for r in range(ROWS):
-        for c in range(COLS):
+    for r in range(rows):
+        for c in range(cols):
             value = board.grid[r][c]
-            color = COLORS.get(value, (220, 40, 40))
+            color = Colours.get(value, (220, 40, 40))
 
             rect = pygame.Rect(
-                c * CELL_SIZE,
-                y_offset + r * CELL_SIZE,
-                CELL_SIZE,
-                CELL_SIZE,
+                c * cell_size,
+                y_offset + r * cell_size,
+                cell_size,
+                cell_size,
             )
 
             pygame.draw.rect(screen, color, rect)
@@ -62,10 +62,10 @@ def draw_board(screen, board, title="", score=0, lines=0, moves=0):
     pygame.display.flip()
 
 
-def play_heuristic_demo(max_moves=500, delay=0.08):
+def play_heuristic_demo(max_moves=500, delay=0.05):
     pygame.init()
 
-    screen = pygame.display.set_mode((WIDTH, HEIGHT + 110))
+    screen = pygame.display.set_mode((width, height + 110))
     pygame.display.set_caption("Heuristic Tetris Agent")
 
     g = game(use_bomb=True)
@@ -89,12 +89,14 @@ def play_heuristic_demo(max_moves=500, delay=0.08):
         move, _ = agent.best_move(board, block_class)
 
         if move is None:
+            pygame.image.save(screen, "heuristic_final_board.png")
             break
 
         rotation, col = move
         result = g.simulate_move(board, block_class, rotation, col)
 
         if result is None:
+            pygame.image.save(screen, "heuristic_final_board.png")
             break
 
         new_board, _, cleared_lines, _ = result
@@ -121,9 +123,9 @@ def play_heuristic_demo(max_moves=500, delay=0.08):
 
 
 def play_rl_demo(
-    model_path="final_tetris_rl_agent.pt",
+    model_path="tetris_rl_state_high.pt",
     max_moves=500,
-    delay=0.3,
+    delay=0.01,
 ):
     pygame.init()
 
@@ -154,6 +156,7 @@ def play_rl_demo(
         chosen = agent.select_action(board, block_class, training=False)
 
         if chosen is None:
+            pygame.image.save(screen, "rl_final_board.png")
             break
 
         rotation, col = chosen[0]
@@ -161,6 +164,7 @@ def play_rl_demo(
         result = g.simulate_move(board, block_class, rotation, col)
 
         if result is None:
+            pygame.image.save(screen, "rl_final_board.png")
             break
 
         new_board, _, cleared_lines, _ = result

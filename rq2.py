@@ -3,7 +3,7 @@ import csv
 from statistics import mean
 
 import torch
-
+import matplotlib.pyplot as plt
 from board import Board
 from game import game
 from rl_agent import RLAgent
@@ -15,7 +15,7 @@ def game_score(lines_cleared: int) -> int:
 
 def train_one_reward(
     reward_mode: str,
-    episodes: int = 500,
+    episodes: int = 1500,
     max_moves: int = 1000,
     seed: int = 42,
 ):
@@ -23,7 +23,10 @@ def train_one_reward(
     torch.manual_seed(seed)
 
     sim = game(use_bomb=False)
-    agent = RLAgent(reward_mode=reward_mode)
+    agent = RLAgent(
+        input_dim=5,
+        feature_mode="medium",
+        reward_mode=reward_mode)
 
     episode_scores = []
     episode_lines = []
@@ -52,11 +55,11 @@ def train_one_reward(
             if result is None:
                 break
 
-            new_board, _, lines_cleared, _ = result
+            new_board, _, lines_cleared, cleared_cells = result
 
-            reward = agent.reward_function(new_board, lines_cleared)
+            reward = agent.reward_function(new_board, lines_cleared, cleared_cells)
 
-            board.grid = [row[:] for row in new_board.grid]
+            board = new_board
 
             next_block = sim.get_random_block()
             next_block_class = next_block.__class__
@@ -105,7 +108,7 @@ def train_one_reward(
 def evaluate_model(
     model_path: str,
     reward_mode: str,
-    num_games: int = 100,
+    num_games: int = 500,
     max_moves: int = 1000,
 ):
     sim = game(use_bomb=False)
@@ -139,9 +142,9 @@ def evaluate_model(
             if result is None:
                 break
 
-            new_board, _, lines_cleared, _ = result
+            new_board, _, lines_cleared, cleared_cells = result
 
-            board.grid = [row[:] for row in new_board.grid]
+            board = new_board
 
             total_score += game_score(lines_cleared)
             total_lines += lines_cleared
@@ -156,14 +159,51 @@ def evaluate_model(
         "avg_score": mean(scores),
         "avg_lines": mean(lines_list),
         "avg_moves": mean(moves_list),
+        "scores": scores,
+        "lines": lines_list,
+        "moves": moves_list,
     }
+def plot_reward_boxplots(results):
+    labels = [r["reward_mode"] for r in results]
 
+    score_data = [r["scores"] for r in results]
+    line_data = [r["lines"] for r in results]
+    move_data = [r["moves"] for r in results]
+
+    plt.figure(figsize=(10,6))
+    plt.boxplot(score_data, tick_labels=labels)
+    plt.xticks(rotation=20)
+    plt.ylabel("Score")
+    plt.title("Reward Function Comparison - Score")
+    plt.tight_layout()
+    plt.savefig("reward_scores_boxplot.png")
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    plt.boxplot(line_data, tick_labels=labels)
+    plt.xticks(rotation=20)
+    plt.ylabel("Lines Cleared")
+    plt.title("Reward Function Comparison - Lines Cleared")
+    plt.tight_layout()
+    plt.savefig("reward_lines_boxplot.png")
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    plt.boxplot(move_data, tick_labels=labels)
+    plt.xticks(rotation=20)
+    plt.ylabel("Moves Survived")
+    plt.title("Reward Function Comparison - Moves Survived")
+    plt.tight_layout()
+    plt.savefig("reward_moves_boxplot.png")
+    plt.close()
 
 def run_rq2_experiment():
     reward_modes = [
         "baseline",
         "strong_holes",
         "tetris_bonus",
+        "survival_bonus",
+        "tetris_survival",
     ]
 
     results = []
@@ -171,6 +211,7 @@ def run_rq2_experiment():
     for reward_mode in reward_modes:
         print(f"\nTraining reward mode: {reward_mode}")
         model_path = train_one_reward(reward_mode)
+        
 
         print(f"Evaluating reward mode: {reward_mode}")
         result = evaluate_model(model_path, reward_mode)
@@ -182,11 +223,62 @@ def run_rq2_experiment():
             fieldnames=["reward_mode", "avg_score", "avg_lines", "avg_moves"],
         )
         writer.writeheader()
-        writer.writerows(results)
+        for r in results:
+            writer.writerow({
+                "reward_mode": r["reward_mode"],
+                "avg_score": r["avg_score"],
+                "avg_lines": r["avg_lines"],
+                "avg_moves": r["avg_moves"],
+            })
 
     print("\nRQ2 reward design results:")
     for r in results:
         print(r)
+    plot_reward_boxplots(results)
+
+def run_rq2_evaluation_only():
+    reward_modes = [
+        "baseline",
+        "strong_holes",
+        "tetris_bonus",
+        "survival_bonus",
+        "tetris_survival",
+    ]
+
+    results = []
+
+    for reward_mode in reward_modes:
+        model_path = f"tetris_rl_{reward_mode}.pt"
+
+        print(f"Evaluating {reward_mode}")
+        result = evaluate_model(model_path, reward_mode)
+        results.append(result)
+
+    plot_reward_boxplots(results)
+
+    with open("rq2_reward_results.csv", "w", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["reward_mode", "avg_score", "avg_lines", "avg_moves"],
+        )
+        writer.writeheader()
+
+        for r in results:
+            writer.writerow({
+                "reward_mode": r["reward_mode"],
+                "avg_score": r["avg_score"],
+                "avg_lines": r["avg_lines"],
+                "avg_moves": r["avg_moves"],
+            })
+
+    print("\nRQ2 Results")
+    for r in results:
+        print(
+            f"{r['reward_mode']:16}"
+            f" Score: {r['avg_score']:.1f}"
+            f" | Lines: {r['avg_lines']:.2f}"
+            f" | Moves: {r['avg_moves']:.2f}"
+        )
 
 
 if __name__ == "__main__":
