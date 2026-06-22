@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 def run_experiment(num_games=300, max_moves=2000):
 
-    g = game(use_bomb=False)
+    g = game(use_bomb=True)
     agent = HeuristicAgent(g)
 
     scores = []
@@ -189,9 +189,9 @@ def run_experiment(num_games=300, max_moves=2000):
     plt.figure()
     plt.bar(labels, values)
     plt.ylabel("Number of occurrences")
-    plt.title("Distribution of line clear (Heuristic Agent)")
+    plt.title("Distribution of line clear with Bomb Piece (Heuristic Agent)")
     plt.tight_layout()
-    plt.savefig("line_clear_histogram_2.png", dpi=300)
+    plt.savefig("line_clear_histogram_bomb_2.png", dpi=300)
 
     avg_holes = []
 
@@ -215,7 +215,7 @@ def run_experiment(num_games=300, max_moves=2000):
     plt.title("Average Holes During Gameplay (Heuristic Agent)")
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("holes_over_time_2.png", dpi=300)
+    plt.savefig("holes_over_time_bomb_2.png", dpi=300)
 
 
     if bomb_cells_list:
